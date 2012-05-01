@@ -73,6 +73,10 @@ module ActiveScaffold::DataStructures
     cattr_accessor :send_form_on_update_column
     attr_accessor :send_form_on_update_column
 
+    # mark the column as readonly, this disables it in the update/create forms
+    cattr_accessor :readonly
+    attr_accessor :readonly
+
     # sorting on a column can be configured four ways:
     #   sort = true               default, uses intelligent sorting sql default
     #   sort = false              sometimes sorting doesn't make sense
@@ -341,6 +345,22 @@ module ActiveScaffold::DataStructures
         value
       end
     end
+
+    def readonly=(roval)
+      @readonly = roval
+      if roval
+        #if this is an association and it is flagged as readonly
+	#disable the bits of the form that relate to adding new 
+	#members
+        @allow_add_existing = false
+	@show_blank_record = false
+      end
+    end
+
+    def readonly
+      self.class.readonly || @readonly
+    end
+
 
     protected
 

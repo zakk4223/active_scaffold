@@ -101,6 +101,10 @@ module ActiveScaffold::Config
     # STI children models, use an array of model names
     attr_accessor :sti_children
 
+
+    #Set an entire controller readonly
+    attr_accessor :readonly
+
     ##
     ## internal usage only below this point
     ## ------------------------------------

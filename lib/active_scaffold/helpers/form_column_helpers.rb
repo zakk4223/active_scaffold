@@ -5,12 +5,29 @@ module ActiveScaffold
       # This method decides which input to use for the given column.
       # It does not do any rendering. It only decides which method is responsible for rendering.
       def active_scaffold_input_for(column, scope = nil, options = {})
-        options = active_scaffold_input_options(column, scope, options)
-        options = update_columns_options(column, scope, options)
-        active_scaffold_render_input(column, options)
+        if column.readonly || @record.readonly?
+	  active_scaffold_readonly_column_string(@record.send column.name)
+	else
+          options = active_scaffold_input_options(column, scope, options)
+          options = update_columns_options(column, scope, options)
+          active_scaffold_render_input(column, options)
+	end
       end
 
       alias form_column active_scaffold_input_for
+
+
+      def active_scaffold_readonly_column_string(col_val)
+	return nil unless col_val
+	if col_val.respond_to? :to_label
+          col_val.to_label
+	elsif col_val.is_a? Array
+          col_value.map {|v| active_scaffold_readonly_column_string(v)}.join(',')
+	else
+          col_val.to_s
+	end
+      end
+
 
       def active_scaffold_render_input(column, options)
         begin
