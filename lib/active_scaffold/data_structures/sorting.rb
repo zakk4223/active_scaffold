@@ -84,8 +84,16 @@ module ActiveScaffold::DataStructures
       @clauses.first
     end
 
-    # builds an order-by clause
+
+
     def clause
+      my_array = caluse_array
+      my_array.join(', ') unless my_array.empty?
+    end
+
+    # builds an order-by clause
+    
+    def clause_array
       return nil if sorts_by_method? || default_sorting?
 
       # unless the sorting is by method, create the sql string
@@ -97,7 +105,7 @@ module ActiveScaffold::DataStructures
         order << Array(sql).map {|column| "#{column} #{sort_direction}"}.join(', ')
       end
 
-      order.join(', ') unless order.empty?
+      order
     end
 
     protected
