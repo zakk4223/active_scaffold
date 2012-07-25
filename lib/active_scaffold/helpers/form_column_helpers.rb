@@ -22,7 +22,7 @@ module ActiveScaffold
 	if col_val.respond_to? :to_label
           col_val.to_label
 	elsif col_val.is_a? Array
-          col_value.map {|v| active_scaffold_readonly_column_string(v)}.join(',')
+          col_val.map {|v| active_scaffold_readonly_column_string(v)}.join(',')
 	else
           col_val.to_s
 	end

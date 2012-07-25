@@ -8,8 +8,10 @@
   tr_id = "association-#{options[:id]}"
 -%>
 <tr id="<%= tr_id %>" class="association-record <%= 'association-record-new' if @record.new_record? -%> <%= 'locked' if locked -%>">
-<% config.subform.columns.each :for => @record.class, :crud_type => :read, :flatten => true do |column| %>
+<% config.subform.columns_for(controller.class.to_s).each :for => @record.class, :crud_type => :read, :flatten => true do |column| %>
 <%
+	Rails.logger.debug("CONTROLLER CLASS #{controller.class.to_s}")
+	Rails.logger.debug("SUBFORM COLUMN #{column.name}")
   next unless in_subform?(column, parent_record)
   show_actions = true
   column = column.clone
