@@ -5,6 +5,7 @@ module ActiveScaffold::Config
 
     def initialize(core_config)
       @core = core_config
+      @action_group = self.class.action_group.clone if self.class.action_group
     end
 
     def self.inherited(subclass)
@@ -62,9 +63,12 @@ module ActiveScaffold::Config
     private
     
     def columns=(val)
-      @columns = ActiveScaffold::DataStructures::ActionColumns.new(*val)
-      @columns.action = self
-      @columns.set_columns(@core.columns) if @columns.respond_to?(:set_columns)
+      @columns.set_values(*val) if @columns
+      @columns ||= ActiveScaffold::DataStructures::ActionColumns.new(*val).tap do |columns|
+        columns.action = self
+        columns.set_columns(@core.columns) if @columns.respond_to?(:set_columns)
+        columns
+      end
       @columns
     end
   end

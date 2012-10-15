@@ -6,7 +6,11 @@ module ActiveScaffold::DataStructures
         nested_info[:name] = (params[:association] || params[:named_scope]).to_sym
         nested_info[:parent_scaffold] = "#{params[:parent_scaffold].to_s.camelize}Controller".constantize
         nested_info[:parent_model] = nested_info[:parent_scaffold].active_scaffold_config.model
-        nested_info[:parent_id] = params[nested_info[:parent_model].name.foreign_key]
+        nested_info[:parent_id] = if params[:association].nil?
+          params[nested_info[:parent_model].name.foreign_key]
+        else
+          params[nested_info[:parent_model].reflect_on_association(params[:association].to_sym).active_record.name.foreign_key]
+        end
         if nested_info[:parent_id]
           unless params[:association].nil?
             ActiveScaffold::DataStructures::NestedInfoAssociation.new(model, nested_info)
@@ -38,18 +42,34 @@ module ActiveScaffold::DataStructures
     end
     
     def parent_scope
-      parent_model.find(parent_id)
+      @parent_scope ||= parent_model.find(parent_id)
     end
     
     def habtm?
       false 
     end
-    
+
+    def has_many?
+      false
+    end
+
     def belongs_to?
       false
     end
 
     def has_one?
+      false
+    end
+
+    def singular_association?
+      belongs_to? || has_one?
+    end
+
+    def plural_association?
+      has_many? || habtm?
+    end
+
+    def through_association?
       false
     end
     
@@ -73,6 +93,10 @@ module ActiveScaffold::DataStructures
       self.association.name
     end
     
+    def has_many?
+      association.macro == :has_many 
+    end
+    
     def habtm?
       association.macro == :has_and_belongs_to_many 
     end
@@ -85,12 +109,12 @@ module ActiveScaffold::DataStructures
       association.macro == :has_one
     end
     
+    def through_association?
+      association.options[:through]
+    end
+    
     def readonly?
-      if association.options.has_key? :readonly
-        association.options[:readonly]
-      else
-        association.options.has_key? :through
-      end
+      association.options[:readonly]
     end
 
     def sorted?
@@ -108,8 +132,8 @@ module ActiveScaffold::DataStructures
     protected
     
     def iterate_model_associations(model)
-      @constrained_fields = []
-      @constrained_fields << association.foreign_key.to_sym unless association.belongs_to?
+      @constrained_fields = Set.new
+      constrained_fields << association.foreign_key.to_sym unless association.belongs_to?
       model.reflect_on_all_associations.each do |current|
         if !current.belongs_to? && association.foreign_key == current.association_foreign_key
           constrained_fields << current.name.to_sym
@@ -125,6 +149,7 @@ module ActiveScaffold::DataStructures
           end
         end
       end
+      @constrained_fields = @constrained_fields.to_a
     end
   end
   

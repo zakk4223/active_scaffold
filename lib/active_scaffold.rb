@@ -70,6 +70,7 @@ module ActiveScaffold
 
     base.helper_method :touch_device?
     base.helper_method :hover_via_click?
+    base.helper_method :active_scaffold_constraints
   end
 
   def self.set_defaults(&block)
@@ -138,7 +139,7 @@ module ActiveScaffold
   end
 
   def self.js_config
-    @@js_config ||= {:scroll_on_close => true}
+    @@js_config ||= {:scroll_on_close => :checkInViewport}
   end
 
   # exclude bridges you do not need
@@ -263,13 +264,13 @@ module ActiveScaffold
       controller = active_scaffold_controller_for_column(column, options)
       
       unless controller.nil?
-        options.reverse_merge! :label => column.label, :position => :after, :type => :member, :controller => (controller == :polymorph ? controller : controller.controller_path), :column => column
+        options.reverse_merge! :position => :after, :type => :member, :controller => (controller == :polymorph ? controller : controller.controller_path), :column => column
         options[:parameters] ||= {}
-        options[:parameters].reverse_merge! :parent_scaffold => controller_path, :association => column.association.name
+        options[:parameters].reverse_merge! :association => column.association.name
         if column.plural_association?
           # note: we can't create nested scaffolds on :through associations because there's no reverse association.
           
-          ActiveScaffold::DataStructures::ActionLink.new('index', options) #unless column.through_association?
+          ActiveScaffold::DataStructures::ActionLink.new('index', options.merge(:refresh_on_close => true)) #unless column.through_association?
         else
           actions = controller.active_scaffold_config.actions unless controller == :polymorph
           actions ||= [:create, :update, :show] 
@@ -284,7 +285,7 @@ module ActiveScaffold
     def link_for_association_as_scope(scope, options = {})
       options.reverse_merge! :label => scope, :position => :after, :type => :member, :controller => controller_path
       options[:parameters] ||= {}
-      options[:parameters].reverse_merge! :parent_scaffold => controller_path, :named_scope => scope
+      options[:parameters].reverse_merge! :named_scope => scope
       ActiveScaffold::DataStructures::ActionLink.new('index', options)
     end
 

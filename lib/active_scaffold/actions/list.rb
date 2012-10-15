@@ -11,12 +11,16 @@ module ActiveScaffold::Actions
 
     # get just a single row
     def row
-      @record = find_if_allowed(params[:id], :read)
+      get_row
       respond_to_action(:row)
     end
 
     def list
-      do_list
+      if %w(index list).include? action_name
+        do_list
+      else
+        do_refresh_list
+      end
       @nested_auto_open = active_scaffold_config.list.nested_auto_open
       respond_to_action(:list)
     end
@@ -30,12 +34,10 @@ module ActiveScaffold::Actions
       end
     end
     def list_respond_to_js
-      if params[:adapter]
-        render(:partial => 'list_with_header')
-      elsif embedded?
+      if params[:adapter] || embedded?
         render(:partial => 'list_with_header')
       else
-        render :action => 'refresh_list', :formats => [:js]
+        render :partial => 'refresh_list', :formats => [:js]
       end
     end
     def list_respond_to_xml
@@ -48,14 +50,21 @@ module ActiveScaffold::Actions
       render :text => Hash.from_xml(response_object.to_xml(:only => list_columns_names)).to_yaml, :content_type => Mime::YAML, :status => response_status
     end
     
-    def row_respond_to_html
-      render(:partial => 'row', :locals => {:record => @record})
+    def row_respond_to_js
+      render :action => 'row'
     end
 
     # The actual algorithm to prepare for the list view
     def set_includes_for_list_columns
+      @cache_associations = true
       includes_for_list_columns = active_scaffold_config.list.columns.collect{ |c| c.includes }.flatten.uniq.compact
       self.active_scaffold_includes.concat includes_for_list_columns
+    end
+    
+    def get_row
+      set_includes_for_list_columns
+      klass = beginning_of_chain.includes(active_scaffold_includes)
+      @record = find_if_allowed(params[:id], :read, klass)
     end
 
     # The actual algorithm to prepare for the list view
@@ -74,11 +83,17 @@ module ActiveScaffold::Actions
       end
 
       page = find_page(options)
-      if page.items.blank? && !page.pager.infinite?
+      total_pages = page.pager.number_of_pages
+      if !page.pager.infinite? && !total_pages.zero? && page.number > total_pages
         page = page.pager.last
         active_scaffold_config.list.user.page = page.number
       end
       @page, @records = page, page.items
+    end
+    
+    def do_refresh_list
+      do_search if respond_to? :do_search
+      do_list
     end
 
     def each_record_in_page
@@ -91,13 +106,7 @@ module ActiveScaffold::Actions
 
     def each_record_in_scope
       do_search if respond_to? :do_search
-      finder_options = { :order => "#{active_scaffold_config.model.connection.quote_table_name(active_scaffold_config.model.table_name)}.#{active_scaffold_config.model.primary_key} ASC",
-        :conditions => all_conditions,
-        :joins => joins_for_finder}
-      finder_options.merge! custom_finder_options
-      finder_options.merge! :include => (active_scaffold_includes.blank? ? nil : active_scaffold_includes)
-      klass = beginning_of_chain
-      klass.all(finder_options).each {|record| yield record}
+      append_to_query(beginning_of_chain, finder_options).all.each {|record| yield record}
     end
 
     # The default security delegates to ActiveRecordPermissions.
@@ -119,6 +128,7 @@ module ActiveScaffold::Actions
         @record = find_if_allowed(params[:id], :read) if params[:id] && params[:id] && params[:id].to_i > 0
         respond_to_action(:action_confirmation)
       else
+        @action_link = active_scaffold_config.action_links[action_name]
         if params[:id] && params[:id] && params[:id].to_i > 0
           crud_type ||= (request.post? || request.put?) ? :update : :delete
           @record = find_if_allowed(params[:id], crud_type)
@@ -141,12 +151,11 @@ module ActiveScaffold::Actions
     end
 
     def action_update_respond_to_html
-      do_search if respond_to? :do_search
-      do_list
       redirect_to :action => 'index'
     end
 
     def action_update_respond_to_js
+      do_refresh_list unless @record.present?
       render(:action => 'on_action_update')
     end
 
@@ -173,7 +182,7 @@ module ActiveScaffold::Actions
     alias_method :index_formats, :list_formats
 
     def row_formats
-      ([:html] + active_scaffold_config.formats + active_scaffold_config.list.formats).uniq
+      ([:html, :js] + active_scaffold_config.formats + active_scaffold_config.list.formats).uniq
     end
 
     def action_update_formats

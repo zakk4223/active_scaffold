@@ -60,6 +60,14 @@ module ActiveScaffold::Config
     cattr_accessor :sti_create_links
     @@sti_create_links = true
 
+    # prefix messages with current timestamp, set the format to display (you can use I18n keys) or true and :short will be used
+    cattr_accessor :timestamped_messages
+    @@timestamped_messages = false
+
+    # a hash of string (or array of strings) and highlighter string to highlight words in messages. It will use highlight rails helper
+    cattr_accessor :highlight_messages
+    @@highlight_messages = nil
+
     # instance-level configuration
     # ----------------------------
 
@@ -104,6 +112,11 @@ module ActiveScaffold::Config
 
     #Set an entire controller readonly
     attr_accessor :readonly
+    # prefix messages with current timestamp, set the format to display (you can use I18n keys) or true and :short will be used
+    attr_accessor :timestamped_messages
+
+    # a hash of string (or array of strings) and highlighter string to highlight words in messages. It will use highlight rails helper
+    attr_accessor :highlight_messages
 
     ##
     ## internal usage only below this point
@@ -133,11 +146,13 @@ module ActiveScaffold::Config
 
       # inherit from the global set of action links
       @action_links = self.class.action_links.clone
+      @timestamped_messages = self.class.timestamped_messages
+      @highlight_messages = self.class.highlight_messages
     end
 
     # To be called after your finished configuration
     def _load_action_columns
-      ActiveScaffold::DataStructures::ActionColumns.class_eval {include ActiveScaffold::DataStructures::ActionColumns::AfterConfiguration}
+      #ActiveScaffold::DataStructures::ActionColumns.class_eval {include ActiveScaffold::DataStructures::ActionColumns::AfterConfiguration}
 
       # then, register the column objects
       self.actions.each do |action_name|
@@ -180,9 +195,9 @@ module ActiveScaffold::Config
     end
 
     def self.method_missing(name, *args)
-      klass = "ActiveScaffold::Config::#{name.to_s.titleize}".constantize rescue nil
+      klass = "ActiveScaffold::Config::#{name.to_s.camelcase}".constantize rescue nil
       if @@actions.include? name.to_s.underscore and klass
-        return eval("ActiveScaffold::Config::#{name.to_s.titleize}")
+        return eval("ActiveScaffold::Config::#{name.to_s.camelcase}")
       end
       super
     end
