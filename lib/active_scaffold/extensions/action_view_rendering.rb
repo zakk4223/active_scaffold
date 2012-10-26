@@ -76,7 +76,8 @@ module ActionView::Helpers #:nodoc:
             url = url_for(url_options)
             # parse the ActiveRecord model name from the controller path, which
             # might be a namespaced controller (e.g., 'admin/admins')
-            model = remote_controller.to_s.sub(/.*\//, '').singularize
+            #model = remote_controller.to_s.sub(/.*\//, '').singularize
+	    model = remote_controller.to_s.classify
             content_tag(:div, :class => 'active-scaffold-header') do
               content_tag :h2, link_to(args.first[:label] || active_scaffold_config_for(model).list.label, url, :remote => true)
             end <<
