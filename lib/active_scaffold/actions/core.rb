@@ -85,7 +85,7 @@ module ActiveScaffold::Actions
     end
     
     def default_formats
-      [:html, :js, :json, :xml, :yaml]
+      [:html, :js, :json, :xml, :yaml, :xls]
     end
     # Returns true if the client accepts one of the MIME types passed to it
     # ex: accepts? :html, :xml
