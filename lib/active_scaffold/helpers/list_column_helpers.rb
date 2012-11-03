@@ -6,12 +6,7 @@ module ActiveScaffold
       def get_column_value(record, column)
         begin
           method = get_column_method(record, column)
-          value = if method(method).arity == 1
-            ActiveSupport::Deprecation.warn("Add column argument to field override, signature is unified with list_ui #{column.name}")
-            send(method, record)
-          else
-            send(method, record, column)
-          end
+          value = send(method, record, column)
           value = '&nbsp;'.html_safe if value.nil? or value.blank? # fix for IE 6
           return value
         rescue Exception => e
@@ -49,12 +44,7 @@ module ActiveScaffold
         if column.link
           link = column.link
           associated = record.send(column.association.name) if column.association
-
-          if link.action.nil? || column_link_authorized?(link, column, record, associated)
-            render_action_link(link, record, {:link => text})
-          else
-            "<a class='disabled'>#{text}</a>".html_safe
-          end
+          render_action_link(link, record, :link => text, :authorized => link.action.nil? || column_link_authorized?(link, column, record, associated))
         elsif inplace_edit?(record, column)
           active_scaffold_inplace_edit(record, column, {:formatted_column => text})
         elsif active_scaffold_config.list.wrap_tag
@@ -225,6 +215,7 @@ module ActiveScaffold
         id_options = {:id => record.id.to_s, :action => 'update_column', :name => column.name.to_s}
         tag_options = {:id => element_cell_id(id_options), :class => "in_place_editor_field",
                        :title => as_(:click_to_edit), :data => {:ie_id => record.id.to_s}}
+        tag_options[:data][:ie_update] = column.inplace_edit if column.inplace_edit != true
 
         content_tag(:span, as_(:inplace_edit_handle), :class => 'handle') <<
         content_tag(:span, formatted_column, tag_options)
@@ -248,7 +239,7 @@ module ActiveScaffold
 
       def inplace_edit_data(column)
         data = {}
-        data[:ie_url] = url_for({:controller => params_for[:controller], :action => "update_column", :column => column.name, :id => '__id__'})
+        data[:ie_url] = url_for(params_for(:action => "update_column", :column => column.name, :id => '__id__'))
         data[:ie_cancel_text] = column.options[:cancel_text] || as_(:cancel)
         data[:ie_loading_text] = column.options[:loading_text] || as_(:loading)
         data[:ie_save_text] = column.options[:save_text] || as_(:update)
@@ -292,7 +283,7 @@ module ActiveScaffold
         if column.name == :as_marked
           tag_options[:data] = {
             :ie_mode => :inline_checkbox,
-            :ie_url => url_for(:controller => params_for[:controller], :action => 'mark', :id => '__id__', :eid => params[:eid])
+            :ie_url => url_for(params_for(:action => 'mark', :id => '__id__'))
           }
         else
           tag_options[:data] = inplace_edit_data(column) if column.inplace_edit

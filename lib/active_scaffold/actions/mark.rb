@@ -3,7 +3,7 @@ module ActiveScaffold::Actions
 
     def self.included(base)
       base.before_filter :mark_authorized?, :only => :mark
-      base.prepend_before_filter :assign_marked_records_to_model
+      base.before_filter :assign_marked_records_to_model
       base.helper_method :marked_records
     end
 
@@ -14,9 +14,8 @@ module ActiveScaffold::Actions
         do_demark
       end
       if marked_records.length > 0
-        link = "<a href=\"#{url_for(:action=>:mark, :id=>'', :mark_target => :scope)}\" data-method=\"post\" data-remote=\"true\">#{as_ :mark_all_records}</a>"
         count = marked_records.length
-        flash[:info] = as_(:records_marked, :count => count, :model => active_scaffold_config.label(:count => count), :link => link)
+        flash[:info] = as_(:records_marked, :count => count, :model => active_scaffold_config.label(:count => count))
       end
       respond_to_action(:mark)
     end
@@ -30,7 +29,7 @@ module ActiveScaffold::Actions
     def mark_respond_to_js
       if params[:id]
         do_search if respond_to? :do_search
-        set_includes_for_list_columns
+        set_includes_for_columns if active_scaffold_config.actions.include? :list
         @page = find_page(:pagination => active_scaffold_config.mark.mark_all_mode != :page)
         render :action => 'on_mark'
       else

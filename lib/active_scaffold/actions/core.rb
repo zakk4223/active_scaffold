@@ -2,7 +2,7 @@ module ActiveScaffold::Actions
   module Core
     def self.included(base)
       base.class_eval do
-        before_filter :register_constraints_with_action_columns, :if => :embedded?
+        prepend_before_filter :register_constraints_with_action_columns, :unless => :nested?
         after_filter :clear_flashes
         rescue_from ActiveScaffold::RecordNotAllowed, ActiveScaffold::ActionNotAllowed, :with => :deny_access
       end
@@ -33,11 +33,12 @@ module ActiveScaffold::Actions
     end
 
     def render_field_for_update_columns
-      column = active_scaffold_config.columns[params[:column]]
+      column = active_scaffold_config.columns[params.delete(:column)]
       unless column.nil?
         @source_id = params.delete(:source_id)
         @columns = column.update_columns
-        @scope = params[:scope]
+        @scope = params.delete(:scope)
+        @main_columns = active_scaffold_config.send(@scope ? :subform : (params[:id] ? :update : :create)).columns
         
         if column.send_form_on_update_column
           if @scope
@@ -50,10 +51,10 @@ module ActiveScaffold::Actions
             id = params[:id]
           end
           @record = id ? find_if_allowed(id, :update) : new_model
-          @record = update_record_from_params(@record, active_scaffold_config.send(@scope ? :subform : (id ? :update : :create)).columns, hash)
+          @record = update_record_from_params(@record, @main_columns, hash)
         else
           @record = new_model
-          value = column_value_from_param_value(@record, column, params[:value])
+          value = column_value_from_param_value(@record, column, params.delete(:value))
           @record.send "#{column.name}=", value
         end
         
@@ -157,10 +158,10 @@ module ActiveScaffold::Actions
     def conditions_from_params
       @conditions_from_params ||= begin
         conditions = {}
-        params.reject {|key, value| [:controller, :action, :id, :page, :sort, :sort_direction].include?(key.to_sym)}.each do |key, value|
+        params.except(:controller, :action, :page, :sort, :sort_direction).each do |key, value|
           next unless active_scaffold_config.model.columns_hash[key.to_s]
           next if active_scaffold_constraints[key.to_sym]
-          next if nested? and nested.constrained_fields.include? key.to_sym
+          next if nested? and nested.param_name == key.to_sym
           conditions[key.to_sym] = value
         end
         conditions
@@ -169,11 +170,12 @@ module ActiveScaffold::Actions
 
     def new_model
       model = beginning_of_chain
-      if model.columns_hash[column = model.inheritance_column]
-        build_options = {column.to_sym => active_scaffold_config.model_id} if nested? && nested.association && nested.association.collection?
+      if nested? && nested.association && nested.association.collection? && model.columns_hash[column = model.inheritance_column]
         model_name = params.delete(column) # in new action inheritance_column must be in params
         model_name ||= params[:record].delete(column) unless params[:record].blank? # in create action must be inside record key
-        model = model_name.camelize.constantize if model_name
+        model_name = model_name.camelize if model_name
+        model_name ||= active_scaffold_config.model.name
+        build_options = {column.to_sym => model_name} if model_name
       end
       model.respond_to?(:build) ? model.build(build_options || {}) : model.new
     end
