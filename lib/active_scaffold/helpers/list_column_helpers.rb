@@ -201,8 +201,7 @@ module ActiveScaffold
       def inplace_edit?(record, column)
         if column.inplace_edit
           editable = controller.send(:update_authorized?, record) if controller.respond_to?(:update_authorized?)
-          editable = record.authorized_for?(:crud_type => :update, :column => column.name) if editable.nil? || editable == true
-          editable
+          editable ||= record.authorized_for?(:crud_type => :update, :column => column.name)
         end
       end
 
@@ -253,7 +252,7 @@ module ActiveScaffold
         elsif inplace_edit_cloning?(column)
           data[:ie_mode] = :clone
         elsif column.inplace_edit == :ajax
-          url = url_for(:controller => params_for[:controller], :action => 'render_field', :id => '__id__', :column => column.name, :update_column => column.name, :in_place_editing => true)
+          url = url_for(:controller => params_for[:controller], :action => 'render_field', :id => '__id__', :update_column => column.name)
           plural = column.plural_association? && !override_form_field?(column) && [:select, :record_select].include?(column.form_ui)
           data[:ie_render_url] = url
           data[:ie_mode] = :ajax
@@ -266,7 +265,7 @@ module ActiveScaffold
         if active_scaffold_config.mark.mark_all_mode == :page
           all_marked = @page.items.detect { |record| !marked_records.include?(record.id) }.nil?
         else
-          all_marked = (marked_records.length >= @page.pager.count)
+          all_marked = (marked_records.length >= @page.pager.count.to_i)
         end
       end
 
@@ -279,7 +278,7 @@ module ActiveScaffold
       end
 
       def render_column_heading(column, sorting, sort_direction)
-        tag_options = {:id => active_scaffold_column_header_id(column), :class => column_heading_class(column, sorting), :title => column.description}
+        tag_options = {:id => active_scaffold_column_header_id(column), :class => column_heading_class(column, sorting), :title => strip_tags(column.description)}
         if column.name == :as_marked
           tag_options[:data] = {
             :ie_mode => :inline_checkbox,

@@ -15,6 +15,12 @@ document.observe("dom:loaded", function() {
   document.on('click', function(event) {
     $$('.action_group.dyn ul').invoke('remove');
   });
+  document.on('ajax:complete', '.action_group.dyn ul a', function() {
+    var source = event.findElement();
+    var action_link = ActiveScaffold.find_action_link(source);
+    if (action_link.loading_indicator) action_link.loading_indicator.css('visibility','hidden');  
+    $(source).up('.action_group.dyn ul').remove();
+  });
   document.on('ajax:create', 'form.as_form', function(event) {
     var source = event.findElement();
     var as_form = event.findElement('form');
@@ -45,7 +51,7 @@ document.observe("dom:loaded", function() {
       return false;
     }
   });
-  document.on('submit', 'form.as_form.as_remote_upload', function(event) {
+  document.on('submit', 'form.as_form:not([data-remote])', function(event) {
     var as_form = event.findElement('form');
     if (as_form && as_form.readAttribute('data-loading') == 'true') {
       setTimeout("ActiveScaffold.disable_form('" + as_form.readAttribute('id') + "')", 10);
@@ -238,9 +244,13 @@ document.observe("dom:loaded", function() {
   });
   document.on('ajax:before', 'a.as_add_existing, a.as_replace_existing', function(event) {
     var button = event.findElement();
-    var url =  button.readAttribute('href').sub('--ID--', button.previous().getValue());
-    event.memo.url = url;
-    return true;
+    var prev = button.previous();
+    if (!prev.match('input,select')) prev = prev.down('input,select');
+    var id = prev.getValue();
+    if (id) {
+      event.memo.url = button.readAttribute('href').sub('--ID--', id);
+      return true;
+    } else return false;
   });
   document.on('change', 'input.update_form, textarea.update_form, select.update_form', function(event) {
     var element = event.findElement();
@@ -395,8 +405,9 @@ var ActiveScaffold = {
     return element;
   },
   
-  remove: function(element) {
+  remove: function(element, callback) {
     $(element).remove();
+    if (callback) callback();
   },
   
   update_inplace_edit: function(element, value, empty) {
@@ -494,11 +505,12 @@ var ActiveScaffold = {
         action_link.close_previous_adapter();
       }
     }
-    row.remove();
-    tbody = $(tbody);
-    this.stripe(tbody);
-    this.decrement_record_count(tbody.up('div.active-scaffold'));
-    this.reload_if_empty(tbody, page_reload_url);
+    ActiveScaffold.remove(row, function() {
+      tbody = $(tbody);
+      ActiveScaffold.stripe(tbody);
+      ActiveScaffold.decrement_record_count(tbody.up('div.active-scaffold'));
+      ActiveScaffold.reload_if_empty(tbody, page_reload_url);
+    });
   },
 
   delete_subform_record: function(record) {
@@ -591,6 +603,7 @@ var ActiveScaffold = {
     toggler.insert(' (<a class="visibility-toggle" href="#">' + initial_label + '</a>)');
     toggler.firstDescendant().observe('click', function(event) {
       var element = event.element();
+      event.stop();
       toggable.toggle(); 
       element.innerHTML = (toggable.style.display == 'none') ? options.show_label : options.hide_label;
       return false;
@@ -674,17 +687,21 @@ var ActiveScaffold = {
     var params = null;
 
     if (send_form) {
-      var selector;
+      var selector, base = as_form;
+      if (send_form == 'row') base = element.up('.association-record, form');
       if (selector = element.readAttribute('data-update_send_form_selector'))
-        params = Form.serializeElements(as_form.getElementsBySelector(selector), true);
+        params = Form.serializeElements(base.getElementsBySelector(selector), true);
+      else if (base != as_form)
+        params = Form.serializeElements(base.getElementsBySelector('input, textarea, select'), true);
       else params = as_form.serialize(true);
+      params['_method'] = '';
     } else {
         params = {value: val};
     }
     params.source_id = source_id;
 
     new Ajax.Request(url, {
-      method: 'get',
+      method: 'post',
       parameters: params,
       onLoading: function(response) {
         element.next('img.loading-indicator').style.visibility = 'visible';
@@ -827,7 +844,9 @@ ActiveScaffold.ActionLink = {
       if (parent && parent.nodeName.toUpperCase() == 'TD') {
         // record action
         parent = parent.up('tr.record')
-        new ActiveScaffold.Actions.Record(parent.select('a.as_action'), parent, parent.down('td.actions .loading-indicator'));
+        var loading_indicator = parent.down('td.actions .loading-indicator');
+        if (!loading_indicator) loading_indicator = element.parent().find('.loading-indicator');
+        new ActiveScaffold.Actions.Record(parent.select('a.as_action'), parent, loading_indicator);
       } else if (parent && parent.nodeName.toUpperCase() == 'DIV') {
         //table action
         new ActiveScaffold.Actions.Table(parent.select('a.as_action'), parent.up('div.active-scaffold').down('tbody.before-header'), parent.down('.loading-indicator'));
@@ -860,10 +879,17 @@ ActiveScaffold.ActionLink.Abstract = Class.create({
   },
 
   close: function() {
-    this.enable();
-    this.adapter.remove();
-    if (this.hide_target) this.target.show();
-    if (ActiveScaffold.config.scroll_on_close) ActiveScaffold.scroll_to(this.target.id, ActiveScaffold.config.scroll_on_close == 'checkInViewport');
+    var link = this;
+    ActiveScaffold.remove(this.adapter, function() {
+      link.enable();
+      if (link.hide_target) link.target.show();
+      if (ActiveScaffold.config.scroll_on_close) ActiveScaffold.scroll_to(link.target.id, ActiveScaffold.config.scroll_on_close == 'checkInViewport');
+    });
+  },
+
+  reload: function() {
+    this.close();
+    this.open();
   },
 
   get_new_adapter_id: function() {
@@ -930,8 +956,7 @@ ActiveScaffold.ActionLink.Record = Class.create(ActiveScaffold.ActionLink.Abstra
   close_previous_adapter: function() {
     this.set.links.each(function(item) {
       if (item.url != this.url && item.is_disabled() && !item.keep_open() && item.adapter) {
-        item.enable();
-        item.adapter.remove();
+        ActiveScaffold.remove(item.adapter, function () { item.enable(); });
       }
     }.bind(this));
   },
@@ -1024,11 +1049,6 @@ ActiveScaffold.ActionLink.Table = Class.create(ActiveScaffold.ActionLink.Abstrac
       throw 'Unknown position "' + this.position + '"'
     }
     ActiveScaffold.highlight(this.adapter.down('td').down());
-  },
-
-  reload: function() {
-    this.close();
-    this.open();
   },
 });
 

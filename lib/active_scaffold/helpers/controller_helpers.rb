@@ -27,9 +27,11 @@ module ActiveScaffold
         if params[:return_to]
           params[:return_to]
         else
+          exclude_parameters = [:utf8, :associated_id]
           parameters = {}
           if params[:parent_scaffold] && nested? && nested.singular_association?
             parameters[:controller] = params[:parent_scaffold]
+            exclude_parameters.concat [nested.param_name, :association, :parent_scaffold]
             #parameters[:eid] = params[:parent_scaffold] # not neeeded anymore?
           end
           parameters.merge! nested.to_params if nested?
@@ -38,7 +40,8 @@ module ActiveScaffold
             #parameters[:eid] = nil # not neeeded anymore?
           end
           parameters[:action] = "index"
-          params_for(parameters).except(:parent_column, :parent_id, :id, :associated_id, :utf8)
+          parameters[:id] = nil
+          params_for(parameters).except(*exclude_parameters)
         end
       end
 
@@ -75,7 +78,11 @@ module ActiveScaffold
       
       def build_associated(column, record)
         if column.singular_association?
-          record.send(:"build_#{column.name}")
+          if column.association.options[:through]
+            record.send(:"build_#{column.association.through_reflection.name}").send(:"build_#{column.name}")
+          else
+            record.send(:"build_#{column.name}")
+          end
         else
           record.send(column.name).build
         end

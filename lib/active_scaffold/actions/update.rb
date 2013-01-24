@@ -52,7 +52,8 @@ module ActiveScaffold::Actions
           if update_refresh_list?
             do_refresh_list
           else
-            get_row
+            # get_row so associations are cached like in list action
+            @record = get_row rescue nil # if record doesn't fullfil current conditions remove it from list
           end
         end
         flash.now[:info] = as_(:updated_model, :model => @record.to_label) if active_scaffold_config.update.persistent
@@ -157,6 +158,9 @@ module ActiveScaffold::Actions
     # You may override the method to customize.
     def update_authorized?(record = nil)
       (!nested? || !nested.readonly?) && (record || self).authorized_for?(:crud_type => :update)
+    end
+    def update_ignore?(record = nil)
+      !self.authorized_for?(:crud_type => :update)
     end
     private
     def update_authorized_filter

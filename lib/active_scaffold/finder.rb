@@ -137,6 +137,11 @@ module ActiveScaffold
             time_parts = [[:hour, '%H'], [:min, '%M'], [:sec, '%S']].collect {|part, format_part| format_part if parts[part].present?}.compact
             format = "#{I18n.t('date.formats.default')} #{time_parts.join(':')} #{'%z' if parts[:offset].present?}"
           else
+            if parts[:hour]
+              [[:min, '%M'], [:sec, '%S']].each {|part, f| format.gsub!(":#{f}", '') unless parts[part].present?}
+            else
+              value += ' 00:00:00'
+            end
             format += ' %z' if parts[:offset].present? && format !~ /%z/i
           end
           time = DateTime.strptime(value, format)
@@ -275,12 +280,14 @@ module ActiveScaffold
       ]
     end
     
-    # returns a single record (the given id) but only if it's allowed for the specified action.
+    # returns a single record (the given id) but only if it's allowed for the specified security options.
+    # security options can be a hash for authorized_for? method or a value to check as a :crud_type
     # accomplishes this by checking model.#{action}_authorized?
     # TODO: this should reside on the model, not the controller
-    def find_if_allowed(id, crud_type, klass = beginning_of_chain)
+    def find_if_allowed(id, security_options, klass = beginning_of_chain)
       record = klass.find(id)
-      raise ActiveScaffold::RecordNotAllowed, "#{klass} with id = #{id}" unless record.authorized_for?(:crud_type => crud_type.to_sym)
+      security_options = {:crud_type => security_options.to_sym} unless security_options.is_a? Hash
+      raise ActiveScaffold::RecordNotAllowed, "#{klass} with id = #{id}" unless record.authorized_for? security_options
       return record
     end
     # valid options may include:

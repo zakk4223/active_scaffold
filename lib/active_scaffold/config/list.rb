@@ -23,6 +23,7 @@ module ActiveScaffold::Config
       @wrap_tag = self.class.wrap_tag
       @always_show_search = self.class.always_show_search
       @always_show_create = self.class.always_show_create
+      @messages_above_header = self.class.messages_above_header
     end
 
     # global level configuration
@@ -42,6 +43,10 @@ module ActiveScaffold::Config
     # what string to use when a field is empty
     cattr_accessor :empty_field_text
     @@empty_field_text = '-'
+
+    # display messages above table header
+    cattr_accessor :messages_above_header
+    @@messages_above_header = false
 
     # what string to use to join records from plural associations
     cattr_accessor :association_join_text
@@ -103,6 +108,9 @@ module ActiveScaffold::Config
 
     # what string to use when a field is empty
     attr_accessor :empty_field_text
+
+    # display messages above table header
+    attr_accessor :messages_above_header
 
     # what string to use to join records from plural associations
     attr_accessor :association_join_text
@@ -222,6 +230,10 @@ module ActiveScaffold::Config
             @sorting = sorting
           else
             @sorting = default_sorting
+            if @conf.columns.constraint_columns.present?
+              @sorting = @sorting.clone
+              @sorting.constraint_columns = @conf.columns.constraint_columns
+            end
           end
         end
         @sorting

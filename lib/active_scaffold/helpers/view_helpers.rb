@@ -100,8 +100,66 @@ module ActiveScaffold
         javascript_tag("ActiveScaffold.create_visibility_toggle('#{id}', #{options.to_json});")
       end
 
-      def skip_action_link(link, *args)
-        (!link.ignore_method.nil? && controller.respond_to?(link.ignore_method) && controller.send(link.ignore_method, *args)) || ((link.security_method_set? or controller.respond_to? link.security_method) and !controller.send(link.security_method, *args))
+      def skip_action_link?(link, *args)
+        !link.ignore_method.nil? && controller.respond_to?(link.ignore_method) && controller.send(link.ignore_method, *args)
+      end
+
+      def action_link_authorized?(link, *args)
+        security_method = link.security_method_set? || controller.respond_to?(link.security_method)
+        authorized = if security_method
+          controller.send(link.security_method, *args)
+        else
+          args.empty? ? true : args.first.authorized_for?(:crud_type => link.crud_type, :action => link.action)
+        end
+      end
+
+      def display_action_links(action_links, record, options, &block)
+        options[:level_0_tag] ||= nil
+        options[:options_level_0_tag] ||= nil
+        options[:level] ||= 0
+        options[:first_action] = true
+        output = ActiveSupport::SafeBuffer.new
+
+        action_links.each(:reverse => options.delete(:reverse), :groups => true) do |link|
+          if link.is_a? ActiveScaffold::DataStructures::ActionLinks
+            unless link.empty?
+              options[:level] += 1
+              content = display_action_links(link, record, options, &block)
+              options[:level] -= 1
+              if content.present?
+                output << display_action_link(link, content, record, options)
+                options[:first_action] = false
+              end
+            end
+          elsif !skip_action_link?(link, *Array(options[:for]))
+            authorized = action_link_authorized?(link, *Array(options[:for]))
+            next if !authorized && options[:skip_unauthorized]
+            output << display_action_link(link, nil, record, options.merge(:authorized => authorized))
+            options[:first_action] = false
+          end
+        end
+        output
+      end
+
+      def display_action_link(link, content, record, options)
+        if content
+          html_classes = hover_via_click? ? 'hover_click ' : ''
+          if options[:level] == 0
+            html_classes << 'action_group'
+            group_tag = :div
+          else
+            html_classes << 'top' if options[:first_action]
+            group_tag = :li
+          end
+          content = content_tag(group_tag, :class => (html_classes if html_classes.present?), :onclick => ('' if hover_via_click?)) do
+            content_tag(:div, as_(link.name), :class => link.name.to_s.downcase) << content_tag(:ul, content)
+          end
+        else
+          content = render_action_link(link, record, options)
+          content = content_tag(:li, content, :class => ('top' if options[:first_action])) unless options[:level] == 0
+        end
+        content = content_tag(options[:level_0_tag], content, options[:options_level_0_tag]) if options[:level] == 0 && options[:level_0_tag]
+        content
       end
 
       def render_action_link(link, record = nil, options = {})
@@ -174,15 +232,14 @@ module ActiveScaffold
           record.authorized_for?(:crud_type => link.crud_type)
         end
       end
-      
+
       def action_link_url(link, record)
-        url = if link.cached_url
-          link.cached_url
-        else
+        url = (@action_links_urls ||= {})[link.name_to_cache_link_url]
+        url ||= begin
           url_options = action_link_url_options(link, record)
           if active_scaffold_config.cache_action_link_urls
             url = url_for(url_options)
-            link.cached_url = url unless link.dynamic_parameters.is_a?(Proc)
+            @action_links_urls[link.name_to_cache_link_url] = url unless link.dynamic_parameters.is_a?(Proc)
             url
           else
             url_for(params_for(url_options))
@@ -193,7 +250,7 @@ module ActiveScaffold
         if link.column.try(:singular_association?)
           url = url.sub('--CHILD_ID--', record.send(link.column.association.name).try(:id).to_s) 
         elsif nested?
-          url = url.sub('--CHILD_ID--', params[nested.param_name])
+          url = url.sub('--CHILD_ID--', params[nested.param_name].to_s)
         end
 
         if active_scaffold_config.cache_action_link_urls

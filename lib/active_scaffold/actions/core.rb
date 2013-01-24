@@ -11,7 +11,7 @@ module ActiveScaffold::Actions
       base.helper_method :new_model
     end
     def render_field
-      if params[:in_place_editing]
+      if request.get?
         render_field_for_inplace_editing
       else
         render_field_for_update_columns
@@ -28,19 +28,20 @@ module ActiveScaffold::Actions
     end
 
     def render_field_for_inplace_editing
-      @record = find_if_allowed(params[:id], :update)
-      render :inline => "<%= active_scaffold_input_for(active_scaffold_config.columns[params[:update_column].to_sym]) %>"
+      @column = active_scaffold_config.columns[params[:update_column]]
+      @record = find_if_allowed(params[:id], :crud_type => :update, :column => params[:update_column])
+      render :action => 'render_field_inplace', :layout => false
     end
 
     def render_field_for_update_columns
-      column = active_scaffold_config.columns[params.delete(:column)]
-      unless column.nil?
+      @column = active_scaffold_config.columns[params.delete(:column)]
+      unless @column.nil?
         @source_id = params.delete(:source_id)
-        @columns = column.update_columns
+        @columns = @column.update_columns
         @scope = params.delete(:scope)
         @main_columns = active_scaffold_config.send(@scope ? :subform : (params[:id] ? :update : :create)).columns
         
-        if column.send_form_on_update_column
+        if @column.send_form_on_update_column
           if @scope
             hash = @scope.gsub('[','').split(']').inject(params[:record]) do |hash, index|
               hash[index]
@@ -54,11 +55,11 @@ module ActiveScaffold::Actions
           @record = update_record_from_params(@record, @main_columns, hash)
         else
           @record = new_model
-          value = column_value_from_param_value(@record, column, params.delete(:value))
-          @record.send "#{column.name}=", value
+          value = column_value_from_param_value(@record, @column, params.delete(:value))
+          @record.send "#{@column.name}=", value
         end
         
-        after_render_field(@record, column)
+        after_render_field(@record, @column)
       end
     end
     
@@ -159,10 +160,12 @@ module ActiveScaffold::Actions
       @conditions_from_params ||= begin
         conditions = {}
         params.except(:controller, :action, :page, :sort, :sort_direction).each do |key, value|
-          next unless active_scaffold_config.model.columns_hash[key.to_s]
-          next if active_scaffold_constraints[key.to_sym]
-          next if nested? and nested.param_name == key.to_sym
-          conditions[key.to_sym] = value
+          column = active_scaffold_config.model.columns_hash[key.to_s]
+          key = key.to_sym
+          next unless column
+          next if active_scaffold_constraints[key]
+          next if nested? and nested.param_name == key
+          conditions[key] = column.type_cast(value)
         end
         conditions
       end

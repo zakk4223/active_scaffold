@@ -76,11 +76,21 @@ module ActiveScaffold
         end
       end
       
-      def active_scaffold_render_subform_column(column, scope, crud_type, readonly)
+      def active_scaffold_render_subform_column(column, scope, crud_type, readonly, add_class = false)
+        if add_class
+          col_class = []
+          col_class << 'required' if column.required?
+          col_class << column.css_class unless column.css_class.nil? || column.css_class.is_a?(Proc)
+          col_class << 'hidden' if column_renders_as(column) == :hidden
+          col_class << 'checkbox' if column.form_ui == :checkbox
+          col_class = col_class.join(' ')
+        end
         unless readonly and not @record.new_record? or not @record.authorized_for?(:crud_type => crud_type, :column => column.name)
-          render :partial => form_partial_for_column(column), :locals => { :column => column, :scope => scope }
+          render :partial => form_partial_for_column(column), :locals => { :column => column, :scope => scope, :col_class => col_class }
         else
-          content_tag :span, get_column_value(@record, column), active_scaffold_input_options(column, scope).except(:name)
+          options = active_scaffold_input_options(column, scope).except(:name)
+          options[:class] = "#{options[:class]} #{col_class}" if col_class
+          content_tag :span, get_column_value(@record, column), options
         end
       end
 
@@ -119,7 +129,7 @@ module ActiveScaffold
           active_scaffold_config.send(@record.new_record? ? :create : :update)
         end
         if form_action && column.update_columns && (column.update_columns & form_action.columns.names).present?
-          url_params = {:action => 'render_field', :column => column.name}
+          url_params = {:action => 'render_field', :column => column.name, :id => nil}
           url_params[:id] = @record.id if column.send_form_on_update_column
           url_params[:eid] = params[:eid] if params[:eid]
           if scope
@@ -129,17 +139,21 @@ module ActiveScaffold
 
           options[:class] = "#{options[:class]} update_form".strip
           options['data-update_url'] = url_for(url_params)
-          options['data-update_send_form'] = true if column.send_form_on_update_column
+          options['data-update_send_form'] = column.send_form_on_update_column
           options['data-update_send_form_selector'] = column.options[:send_form_selector] if column.options[:send_form_selector]
         end
         options
+      end
+
+      def field_attributes(column, record)
+        {}
       end
 
       ##
       ## Form input methods
       ##
       
-      def grouped_options_for_select(column, select_options, optgroup)
+      def active_scaffold_grouped_options(column, select_options, optgroup)
         group_label = active_scaffold_config_for(column.association.klass).columns[optgroup].try(:association) ? :to_label : :to_s
         select_options.group_by(&optgroup.to_sym).collect do |group, options|
           [group.send(group_label), options.collect {|r| [r.to_label, r.id]}]
@@ -167,7 +181,7 @@ module ActiveScaffold
         active_scaffold_translate_select_options(options)
 
         if optgroup = options.delete(:optgroup)
-          select(:record, method, grouped_options_for_select(column, select_options, optgroup), options, html_options)
+          select(:record, method, active_scaffold_grouped_options(column, select_options, optgroup), options, html_options)
         else
           collection_select(:record, method, select_options, :id, :to_label, options, html_options)
         end
@@ -186,8 +200,9 @@ module ActiveScaffold
       end
       
       def active_scaffold_checkbox_list(column, select_options, associated_ids, options)
-        html = content_tag :ul, :class => "#{options[:class]} checkbox-list", :id => options[:id] do
-          content = hidden_field_tag("#{options[:name]}[]", '')
+        html = hidden_field_tag("#{options[:name]}[]", '')
+        html << content_tag(:ul, :class => "#{options[:class]} checkbox-list", :id => options[:id]) do
+          content = ''.html_safe
           select_options.each_with_index do |option, i|
             label, id = option
             this_id = "#{options[:id]}_#{i}_id"
@@ -206,10 +221,14 @@ module ActiveScaffold
         value = text if value.nil?
         [(text.is_a?(Symbol) ? column.active_record_class.human_attribute_name(text) : text), value]
       end
+      
+      def active_scaffold_enum_options(column)
+        column.options[:options]
+      end
 
       def active_scaffold_input_enum(column, html_options)
         options = { :selected => @record.send(column.name) }
-        options_for_select = column.options[:options].collect do |text, value|
+        options_for_select = active_scaffold_enum_options(column).collect do |text, value|
           active_scaffold_translated_option(column, text, value)
         end
         html_options.update(column.options[:html_options] || {})
