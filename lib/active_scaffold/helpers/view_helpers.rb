@@ -542,6 +542,7 @@ module ActiveScaffold
           object = instance_variable_get("@#{object}") unless object.respond_to?(:to_model)
           object = convert_to_model(object)
 
+
           if object.class.respond_to?(:model_name)
             options[:object_name] ||= object.class.model_name.human.downcase
           end
@@ -551,7 +552,6 @@ module ActiveScaffold
 
         objects.compact!
         count = objects.inject(0) {|sum, object| sum + object.errors.count }
-
         unless count.zero?
           html = {}
           [:id, :class].each do |key|
